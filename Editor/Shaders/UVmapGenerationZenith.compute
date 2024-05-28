@@ -1,0 +1,20 @@
+#pragma kernel CSMain
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+
+RWTexture2D<float4> outputRT;
+int width;
+int height;
+int offsetX;
+int offsetY;
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= width || id.x < 0 || id.y >= height || id.y < 0) return;
+
+    // 从上方向与视角方向的点乘结果拿到方位角映射图的索引，更确切的说，这里是视角的反方向
+    float upDotView = float(id.x) / float(width);
+    // float cos
+
+    outputRT[id.xy] = float4();
+}

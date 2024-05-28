@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using Unity.VisualScripting;
@@ -70,11 +71,11 @@ namespace Sloane
             bounds = EditorGUILayout.BoundsField("Bounds", bounds);
 
             castChannelSettings.castAbeldo = EditorGUILayout.Toggle("Cast Abeldo", castChannelSettings.castAbeldo);
-            castChannelSettings.castNormal = EditorGUILayout.Toggle("Cast Abeldo", castChannelSettings.castNormal);
-            castChannelSettings.castMask = EditorGUILayout.Toggle("Cast Abeldo", castChannelSettings.castMask);
+            castChannelSettings.castNormal = EditorGUILayout.Toggle("Cast Normal", castChannelSettings.castNormal);
+            castChannelSettings.castMask = EditorGUILayout.Toggle("Cast Mask", castChannelSettings.castMask);
 
             if (segmentSize < 16) segmentSize = 16;
-            if (segmentCountScale < 1) segmentCountScale = 1;
+            if (segmentCountScale < 0) segmentCountScale = 0;
             if (mapSize < 64) mapSize = 64;
         }
 
@@ -95,7 +96,7 @@ namespace Sloane
 
         public static void ExecuteCast(GameObject targetObject, Bounds targetBounds, string outputPath, int zenithCount, int azimuthCount, int singleSegmentSize, CastChannelSettings settings)
         {
-
+            azimuthCount = Mathf.Max(azimuthCount, 1);
             int segmentCount = (zenithCount + 1) * azimuthCount;
             int gridWidth = Mathf.CeilToInt(Mathf.Sqrt(segmentCount));
 
@@ -151,7 +152,7 @@ namespace Sloane
                 TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, outPath);
             }
 
-            if (settings.castAbeldo)
+            if (settings.castNormal)
             {
                 pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotNormalPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
@@ -159,7 +160,7 @@ namespace Sloane
                 TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, outPath);
             }
 
-            if (settings.castAbeldo)
+            if (settings.castMask)
             {
                 pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotMaskPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
@@ -189,20 +190,20 @@ namespace Sloane
             {
                 for (int j = 0; j < azimuthCount; j++)
                 {
-                    float theta = Mathf.PI * i / zenithCount;
+                    float theta = zenithCount == 0 ? Mathf.PI / 2.0f : Mathf.PI * i;
                     float phi = 2.0f * j * Mathf.PI / azimuthCount;
 
-                    Vector3 viewDirection = new Vector3(Mathf.Sin(theta) * Mathf.Cos(phi), Mathf.Cos(theta), Mathf.Sin(theta) * Mathf.Sin(phi));
+                    Vector3 viewDirection = new Vector3(-Mathf.Sin(theta) * Mathf.Sin(phi), Mathf.Cos(theta), -Mathf.Sin(theta) * Mathf.Cos(phi));
                     viewDirection *= -1;
-                    Vector3 upDirection = new Vector3(-Mathf.Cos(theta) * Mathf.Cos(phi), Mathf.Sin(theta), -Mathf.Cos(theta) * Mathf.Sin(phi));
+                    Vector3 upDirection = new Vector3(Mathf.Cos(theta) * Mathf.Sin(phi), Mathf.Sin(theta), Mathf.Cos(theta) * Mathf.Cos(phi));
 
                     camera.transform.rotation = Quaternion.LookRotation(viewDirection, upDirection);
                     camera.transform.localPosition = -viewDirection * boundsDistance;
 
                     camera.Render();
 
-                    computeShader.SetInt("offsetX", index / gridWidth * singleSegmentSize);
-                    computeShader.SetInt("offsetY", index % gridWidth * singleSegmentSize);
+                    computeShader.SetInt("offsetX", index % gridWidth * singleSegmentSize);
+                    computeShader.SetInt("offsetY", index / gridWidth * singleSegmentSize);
 
                     computeShader.SetTexture(shaderKernel, "inputRT", castRenderTexture);
                     computeShader.Dispatch(shaderKernel, singleSegmentSize / 8, singleSegmentSize / 8, 1);
