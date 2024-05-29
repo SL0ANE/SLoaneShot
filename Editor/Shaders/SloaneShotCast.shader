@@ -1,4 +1,4 @@
-Shader "Sloane/SloaneShotCast"
+Shader "Sloane/Shot/Cast"
 {
     Properties
     {

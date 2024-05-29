@@ -1,6 +1,4 @@
 using System;
-using System.Collections;
-using System.Collections.Generic;
 using UnityEditor;
 using UnityEngine;
 using UnityEngine.Rendering;
@@ -45,9 +43,17 @@ namespace Sloane
                 if (target != null)
                 {
                     targetPath = EditorUtility.SaveFilePanel("Select Output Path", "", "", "");
-                    Debug.Log(targetPath);
+                    int cutIndex = targetPath.LastIndexOf('_');
+                    if (cutIndex != -1)
+                    {
+                        targetPath = targetPath.Substring(0, cutIndex);
+                        Debug.Log(targetPath);
+                    }
 
-                    ExecuteCast(target, bounds, targetPath, 2 * segmentCountScale, 4 * segmentCountScale, segmentSize, castChannelSettings);
+                    int zenithCount = 2 * segmentCountScale;
+                    int azimuthCount = Mathf.Max(4 * segmentCountScale, 1);
+                    ExecuteCast(target, bounds, targetPath, zenithCount, azimuthCount, segmentSize, castChannelSettings);
+                    // GenerateUVMap(targetPath, zenithCount, azimuthCount, mapSize);
 
                     Close();
                 }
@@ -65,7 +71,7 @@ namespace Sloane
             }
             segmentSize = EditorGUILayout.IntField("Segment Size", segmentSize);
             segmentCountScale = EditorGUILayout.IntField("Segment Count Scale", segmentCountScale);
-            mapSize = EditorGUILayout.IntField("UV Map Size", mapSize);
+            // mapSize = EditorGUILayout.IntField("UV Map Size", mapSize);
 
             bounds = EditorGUILayout.BoundsField("Bounds", bounds);
 
@@ -75,7 +81,7 @@ namespace Sloane
 
             if (segmentSize < 16) segmentSize = 16;
             if (segmentCountScale < 0) segmentCountScale = 0;
-            if (mapSize < 64) mapSize = 64;
+            // if (mapSize < 64) mapSize = 64;
         }
 
         public static Bounds GetBoundsFromRenderers(GameObject targetObject)
@@ -93,11 +99,99 @@ namespace Sloane
             return outputBounds;
         }
 
+        [Obsolete]
+        public static void GenerateUVMap(string outputPath, int zenithCount, int azimuthCount, int uvMapSize)
+        {
+            TextureImporterPlatformSettings platformSetting = new TextureImporterPlatformSettings()
+            {
+                maxTextureSize = 2048,
+                format = TextureImporterFormat.RGBA32,
+                textureCompression = TextureImporterCompression.Uncompressed,
+                crunchedCompression = true,
+                compressionQuality = 100,
+            };
+
+            var zenithRenderTexture = new RenderTexture(uvMapSize, 8, 0, RenderTextureFormat.BGRA32, RenderTextureReadWrite.sRGB)
+            {
+                enableRandomWrite = true,
+                name = "SloaneShotZenithMap",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            string computeShaderPath = SloaneShotConst.PackagePath + "\\Shaders\\UVmapGenerationZenith.compute";
+            var computeShader = Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>(computeShaderPath));
+            int shaderKernel = computeShader.FindKernel("CSMain");
+
+            computeShader.SetTexture(shaderKernel, "outputRT", zenithRenderTexture);
+            computeShader.SetInt("width", uvMapSize);
+            computeShader.SetInt("height", 8);
+            computeShader.SetInt("zenithCount", zenithCount);
+
+            computeShader.Dispatch(shaderKernel, uvMapSize / 8, 1, 1);
+
+            Texture2D outputZenithTexture = new Texture2D(zenithRenderTexture.width, zenithRenderTexture.height, TextureFormat.RGBA32, false)
+            {
+                filterMode = FilterMode.Point
+            };
+
+            RenderTexture.active = zenithRenderTexture;
+            outputZenithTexture.ReadPixels(new Rect(0, 0, zenithRenderTexture.width, zenithRenderTexture.height), 0, 0);
+            RenderTexture.active = null;
+
+            byte[] bytes;
+            bytes = outputZenithTexture.EncodeToPNG();
+
+            string zenithMapPath = outputPath + "_zenith.png";
+
+            System.IO.File.WriteAllBytes(zenithMapPath, bytes);
+            zenithMapPath = GetAssetPath(zenithMapPath);
+            AssetDatabase.ImportAsset(zenithMapPath);
+            outputZenithTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(zenithMapPath);
+            outputZenithTexture.filterMode = FilterMode.Point;
+            var zenithMapSettings = AssetImporter.GetAtPath(zenithMapPath) as TextureImporter;
+            zenithMapSettings.filterMode = FilterMode.Point;
+            zenithMapSettings.SetPlatformTextureSettings(platformSetting);
+
+            var azimuthRenderTexture = new RenderTexture(uvMapSize, uvMapSize, 0, RenderTextureFormat.BGRA32, RenderTextureReadWrite.sRGB)
+            {
+                enableRandomWrite = true,
+                name = "SloaneShotAzimuthMap",
+                hideFlags = HideFlags.HideAndDontSave
+            };
+
+            computeShaderPath = SloaneShotConst.PackagePath + "\\Shaders\\UVmapGenerationAzimuth.compute";
+            computeShader = Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>(computeShaderPath));
+            shaderKernel = computeShader.FindKernel("CSMain");
+
+            computeShader.SetTexture(shaderKernel, "outputRT", azimuthRenderTexture);
+            computeShader.SetInt("width", uvMapSize);
+            computeShader.SetInt("height", uvMapSize);
+            computeShader.SetInt("azimuthCount", azimuthCount);
+
+            computeShader.Dispatch(shaderKernel, uvMapSize, uvMapSize / 8, 1);
+
+            Texture2D outputAzimuthTexture = new Texture2D(azimuthRenderTexture.width, azimuthRenderTexture.height, TextureFormat.RGBA32, false);
+
+            RenderTexture.active = azimuthRenderTexture;
+            outputAzimuthTexture.ReadPixels(new Rect(0, 0, azimuthRenderTexture.width, azimuthRenderTexture.height), 0, 0);
+            RenderTexture.active = null;
+
+            bytes = outputAzimuthTexture.EncodeToPNG();
+
+            string azimuthMapPath = outputPath + "_azimuth.png";
+
+            System.IO.File.WriteAllBytes(azimuthMapPath, bytes);
+            azimuthMapPath = GetAssetPath(azimuthMapPath);
+            AssetDatabase.ImportAsset(azimuthMapPath);
+            var azimuthMapSettings = AssetImporter.GetAtPath(azimuthMapPath) as TextureImporter;
+            azimuthMapSettings.filterMode = FilterMode.Point;
+            azimuthMapSettings.SetPlatformTextureSettings(platformSetting);
+        }
+
         public static void ExecuteCast(GameObject targetObject, Bounds targetBounds, string outputPath, int zenithCount, int azimuthCount, int singleSegmentSize, CastChannelSettings settings)
         {
-            azimuthCount = Mathf.Max(azimuthCount, 1);
             int segmentCount = (zenithCount + 1) * azimuthCount;
-            int gridWidth = Mathf.CeilToInt(Mathf.Sqrt(segmentCount));
+            int gridWidth = Mathf.RoundToInt(Mathf.Pow(2.0f, Mathf.CeilToInt(Mathf.Log(Mathf.Sqrt(segmentCount), 2.0f))));
 
             // 切换pipeline
             RenderPipelineAsset pipelineCache = QualitySettings.renderPipeline;
@@ -148,7 +242,7 @@ namespace Sloane
                 pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotAbeldoPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
                 outPath = outputPath + "_abeldo.png";
-                TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, outPath);
+                TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, targetBounds.center, outPath);
             }
 
             if (settings.castNormal)
@@ -156,7 +250,7 @@ namespace Sloane
                 pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotNormalPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
                 outPath = outputPath + "_normal.png";
-                TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, outPath);
+                TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, targetBounds.center, outPath);
             }
 
             if (settings.castMask)
@@ -164,7 +258,7 @@ namespace Sloane
                 pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotMaskPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
                 outPath = outputPath + "_mask.png";
-                TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, outPath);
+                TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, targetBounds.center, outPath);
             }
 
             // 清理
@@ -174,7 +268,7 @@ namespace Sloane
             QualitySettings.renderPipeline = pipelineCache;
         }
 
-        private static void TakeShot(CommandBuffer cmd, RenderPipelineAsset pipelineAsset, RenderTexture castRenderTexture, RenderTexture outputSetRenderTexture, ComputeShader computeShader, int shaderKernel, int zenithCount, int azimuthCount, int singleSegmentSize, int gridWidth, Camera camera, float boundsDistance, string outputPath)
+        private static void TakeShot(CommandBuffer cmd, RenderPipelineAsset pipelineAsset, RenderTexture castRenderTexture, RenderTexture outputSetRenderTexture, ComputeShader computeShader, int shaderKernel, int zenithCount, int azimuthCount, int singleSegmentSize, int gridWidth, Camera camera, float boundsDistance, Vector3 center, string outputPath)
         {
             QualitySettings.renderPipeline = pipelineAsset;
 
@@ -189,15 +283,15 @@ namespace Sloane
             {
                 for (int j = 0; j < azimuthCount; j++)
                 {
-                    float theta = zenithCount == 0 ? Mathf.PI / 2.0f : Mathf.PI * i;
+                    float theta = zenithCount == 0 ? Mathf.PI / 2.0f : Mathf.PI * i / zenithCount;
                     float phi = 2.0f * j * Mathf.PI / azimuthCount;
 
-                    Vector3 viewDirection = new Vector3(-Mathf.Sin(theta) * Mathf.Sin(phi), Mathf.Cos(theta), -Mathf.Sin(theta) * Mathf.Cos(phi));
+                    Vector3 viewDirection = new Vector3(Mathf.Sin(theta) * Mathf.Sin(phi), Mathf.Cos(theta), Mathf.Sin(theta) * Mathf.Cos(phi));
                     viewDirection *= -1;
-                    Vector3 upDirection = new Vector3(Mathf.Cos(theta) * Mathf.Sin(phi), Mathf.Sin(theta), Mathf.Cos(theta) * Mathf.Cos(phi));
+                    Vector3 upDirection = new Vector3(-Mathf.Cos(theta) * Mathf.Sin(phi), Mathf.Sin(theta), -Mathf.Cos(theta) * Mathf.Cos(phi));
 
                     camera.transform.rotation = Quaternion.LookRotation(viewDirection, upDirection);
-                    camera.transform.localPosition = -viewDirection * boundsDistance;
+                    camera.transform.localPosition = center - viewDirection * boundsDistance * 2.0f;
 
                     camera.Render();
 
@@ -221,8 +315,7 @@ namespace Sloane
             bytes = outputAbeldoTexture.EncodeToPNG();
 
             System.IO.File.WriteAllBytes(outputPath, bytes);
-            AssetDatabase.ImportAsset(outputPath);
-            AssetDatabase.LoadAssetAtPath<Texture2D>(outputPath);
+            AssetDatabase.ImportAsset(GetAssetPath(outputPath));
         }
 
         public static GameObject InitializeTargetGameObject(GameObject targetObject)
@@ -283,6 +376,17 @@ namespace Sloane
             );
 
             return new Bounds(center, size);
+        }
+
+        static string GetAssetPath(string absolutePath)
+        {
+            string projectPath = Application.dataPath;
+
+            if (absolutePath.StartsWith(projectPath))
+            {
+                return "Assets" + absolutePath.Substring(projectPath.Length);
+            }
+            else return null;
         }
     }
 }

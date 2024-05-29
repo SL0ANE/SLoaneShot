@@ -1,0 +1,27 @@
+#pragma kernel CSMain
+#include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Color.hlsl"
+
+RWTexture2D<float4> outputRT;
+int width;
+int height;
+int azimuthCount;
+
+#define PI 3.1415926535897932384626433832795
+
+[numthreads(8,8,1)]
+void CSMain (uint3 id : SV_DispatchThreadID)
+{
+    if(id.x >= width || id.x < 0 || id.y >= height || id.y < 0) return;
+    
+    // 极角位于最上方和最下方时，需要通过相机上方向的和前右方向的点乘结果判断索引
+    // 其余情况通过相机前方向和前右方向的点乘判断索引
+
+    float dotRight = (float(id.x) / float(height) - 0.5) * 2.0;
+    float dotFront = (float(id.y) / float(height) - 0.5) * 2.0;
+    float angle = atan2(dotRight, dotFront);
+    if(angle < 0) angle += 2 * PI;
+
+    float index = round(angle * azimuthCount / (2 * PI)) / azimuthCount;
+
+    outputRT[id.xy] = float4(index, index, index, 1.0);
+}
