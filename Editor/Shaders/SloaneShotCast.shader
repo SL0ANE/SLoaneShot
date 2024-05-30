@@ -108,6 +108,33 @@ Shader "Sloane/Shot/Cast"
         Pass
         {
             Name "Forward"
+			Tags { "LightMode" = "DepthOnly" }
+
+            Blend One Zero
+			ZWrite On
+			ZTest Less
+			ColorMask 0
+            
+            HLSLPROGRAM
+
+            half4 frag(Varyings input) : SV_Target 
+            {
+                float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
+                float4 albedo = tex2D(_BaseMap, albedoUV);
+                clip(albedo.a - _AlphaClip);
+
+                return albedo;
+            }
+
+            #pragma vertex BaseVert
+            #pragma fragment frag
+
+            ENDHLSL
+        }
+
+        Pass
+        {
+            Name "Forward"
 			Tags { "LightMode" = "SloaneCastAbeldo" }
 
             Blend One Zero

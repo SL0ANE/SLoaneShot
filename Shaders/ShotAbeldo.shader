@@ -7,6 +7,12 @@ Shader "Sloane/Shot/Unlit"
         _ZenithCount("Zenith Count", Int) = 5
         _AzimuthCount("Azimuth Count", Int) = 8
         _GridCount("Grid Count", Int) = 8
+
+        [HideinInspector] _UseLut("Use Lut", Range(0.0, 1.0)) = 1.0
+
+        _ZenithMap("Zenith Map", 2D) = "white" {}
+        _AzimuthMap("Azimuth Map", 2D) = "white" {}
+        _SinLut("Sin LUT", 2D) = "white" {}
     }
 
     SubShader
@@ -19,7 +25,11 @@ Shader "Sloane/Shot/Unlit"
         
         #pragma enable_d3d11_debug_symbols
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
+
+        #pragma multi_compile_instancing
+        #pragma shader_feature_local _SLOANESHOT_WITHLUT
 
         struct Attributes {
             float3 positionOS : POSITION;
@@ -51,8 +61,13 @@ Shader "Sloane/Shot/Unlit"
         int _AzimuthCount;
         int _GridCount;
 
+        sampler2D _ZenithMap;
+        sampler2D _AzimuthMap;
+        sampler2D _SinLut;
+
         CBUFFER_END
 
+        // #define SLOANESHOT_WITHLUT
         #include "SloaneShotUtility.hlsl"
         ENDHLSL
 
@@ -110,4 +125,6 @@ Shader "Sloane/Shot/Unlit"
             ENDHLSL
         }
     }
+
+    CustomEditor "Sloane.SloaneShotShaderGUI"
 }

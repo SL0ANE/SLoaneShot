@@ -35,7 +35,7 @@ namespace Sloane
                 return string.Empty;
             }
             
-            return Path.GetDirectoryName(Path.GetDirectoryName(pathStr));
+            return Path.GetDirectoryName(Path.GetDirectoryName(Path.GetDirectoryName(pathStr)));
         }
     }
 }

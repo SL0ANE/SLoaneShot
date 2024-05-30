@@ -1,6 +1,23 @@
 
 #define EPSILON 0.05
-#define PI 3.1415926535897932384626433832795
+
+#ifdef _SLOANESHOT_WITHLUT
+
+float LutSin(float angle)
+{
+    float target = fmod(angle / (2.0 * PI), 1.0);
+    // if(target < 0) target += 1.0;
+    float2 lutUV = float2(target, 0.5);
+
+    return tex2Dlod(_SinLut, float4(lutUV, 0.0, 0.0)).r * 2.0 - 1.0;
+}
+
+float LutCos(float angle)
+{
+    return LutSin(0.5 * PI - angle);
+}
+
+#endif
 
 // 获得正确模型空间下的相机方向
 // 广告牌在模型空间下操作
@@ -10,6 +27,30 @@ void GetCorrectedCameraVector(out float3 camRightDir, out float3 camUpDir, out f
     camFrontDir = normalize(camFrontDir);
     camUpDir = mul(UNITY_MATRIX_I_M, float3(unity_CameraToWorld[0][1], unity_CameraToWorld[1][1], unity_CameraToWorld[2][1]));
     camUpDir = normalize(camUpDir);
+
+#ifdef _SLOANESHOT_WITHLUT
+
+    float2 zenithUV = float2(camFrontDir.y / 2.0 + 0.5, 0.5);
+    float theta = tex2Dlod(_ZenithMap, float4(zenithUV, 0.0, 0.0)).r;
+    zenithIndex = round(theta * _ZenithCount);
+    theta *= PI;
+
+    float2 azimuthUV;
+    if(abs(theta) < EPSILON) azimuthUV = float2(camUpDir.x, camUpDir.z) * 0.5 + 0.5;
+    else if(abs(PI - theta) < EPSILON) azimuthUV = float2(-camUpDir.x, -camUpDir.z) * 0.5 + 0.5;
+    else azimuthUV = float2(-camFrontDir.x, -camFrontDir.z) * 0.5 + 0.5;
+
+    float phi = tex2Dlod(_AzimuthMap, float4(azimuthUV, 0.0, 0.0)).r * 2.0 * PI;
+
+    azimuthIndex = round(phi * _AzimuthCount / (2 * PI)) % _AzimuthCount;
+
+    float cosPhi = LutCos(phi);
+    float sinPhi = LutSin(phi);
+    float cosTheta = LutCos(theta);
+    camUpDir = float3(-cosTheta * sinPhi, LutSin(theta), -cosTheta * cosPhi);
+    camRightDir = float3(-cosPhi, 0.0, sinPhi);
+
+#else
 
     float theta = acos(-camFrontDir.y);
     float phi;
@@ -22,9 +63,15 @@ void GetCorrectedCameraVector(out float3 camRightDir, out float3 camUpDir, out f
     zenithIndex = round(theta * _ZenithCount / PI);
     azimuthIndex = round(phi * _AzimuthCount / (2 * PI)) % _AzimuthCount;
 
-    camUpDir = float3(-cos(theta) * sin(phi), sin(theta), -cos(theta) * cos(phi));
-    camRightDir = float3(-cos(phi), 0.0, sin(phi));
+    float cosPhi = cos(phi);
+    float sinPhi = sin(phi);
+    float cosTheta = cos(theta);
+    camUpDir = float3(-cosTheta * sinPhi, sin(theta), -cosTheta * cosPhi);
+    camRightDir = float3(-cosPhi, 0.0, sinPhi);
+    
+#endif
 }
+
 
 Varyings BaseVert(Attributes input)
 {
@@ -39,8 +86,8 @@ Varyings BaseVert(Attributes input)
     float3 camFrontDir;
     int zenithIndex;
     int azimuthIndex;
-
     GetCorrectedCameraVector(camRightDir, camUpDir, camFrontDir, zenithIndex, azimuthIndex);
+
     float3 positionOS = float3(0.0, 0.0, 0.0);
 
     positionOS += input.positionOS.x * camRightDir;

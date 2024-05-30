@@ -43,11 +43,12 @@ namespace Sloane
                 if (target != null)
                 {
                     targetPath = EditorUtility.SaveFilePanel("Select Output Path", "", "", "");
+                    if (string.IsNullOrEmpty(targetPath)) return;
                     int cutIndex = targetPath.LastIndexOf('_');
                     if (cutIndex != -1)
                     {
                         targetPath = targetPath.Substring(0, cutIndex);
-                        Debug.Log(targetPath);
+                        // Debug.Log(targetPath);
                     }
 
                     int zenithCount = 2 * segmentCountScale;
@@ -81,7 +82,7 @@ namespace Sloane
 
             if (segmentSize < 16) segmentSize = 16;
             if (segmentCountScale < 0) segmentCountScale = 0;
-            // if (mapSize < 64) mapSize = 64;
+            if (mapSize < 64) mapSize = 64;
         }
 
         public static Bounds GetBoundsFromRenderers(GameObject targetObject)
@@ -102,6 +103,13 @@ namespace Sloane
         [Obsolete]
         public static void GenerateUVMap(string outputPath, int zenithCount, int azimuthCount, int uvMapSize)
         {
+            GenerateMap(uvMapSize, 8, "UVmapGenerationZenith", (c) => c.SetInt("zenithCount", zenithCount), outputPath + "_zenith.png");
+            GenerateMap(uvMapSize, uvMapSize, "UVmapGenerationAzimuth", (c) => c.SetInt("azimuthCount", azimuthCount), outputPath + "_azimuth.png");
+            GenerateMap(uvMapSize, 8, "UVmapGenerationSin", null, outputPath + "_sin.png");
+        }
+
+        protected static void GenerateMap(int width, int height, string csName, Action<ComputeShader> action, string outputPath)
+        {
             TextureImporterPlatformSettings platformSetting = new TextureImporterPlatformSettings()
             {
                 maxTextureSize = 2048,
@@ -111,81 +119,43 @@ namespace Sloane
                 compressionQuality = 100,
             };
 
-            var zenithRenderTexture = new RenderTexture(uvMapSize, 8, 0, RenderTextureFormat.BGRA32, RenderTextureReadWrite.sRGB)
+            var renderTexture = new RenderTexture(width, height, 0, RenderTextureFormat.BGRA32, RenderTextureReadWrite.sRGB)
             {
                 enableRandomWrite = true,
-                name = "SloaneShotZenithMap",
+                name = "SloaneShotMap",
                 hideFlags = HideFlags.HideAndDontSave
             };
 
-            string computeShaderPath = SloaneShotConst.PackagePath + "\\Shaders\\UVmapGenerationZenith.compute";
+            string computeShaderPath = SloaneShotConst.PackagePath + "\\Shaders\\" + csName + ".compute";
             var computeShader = Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>(computeShaderPath));
             int shaderKernel = computeShader.FindKernel("CSMain");
 
-            computeShader.SetTexture(shaderKernel, "outputRT", zenithRenderTexture);
-            computeShader.SetInt("width", uvMapSize);
-            computeShader.SetInt("height", 8);
-            computeShader.SetInt("zenithCount", zenithCount);
+            computeShader.SetTexture(shaderKernel, "outputRT", renderTexture);
+            computeShader.SetInt("width", width);
+            computeShader.SetInt("height", height);
+            action?.Invoke(computeShader);
 
-            computeShader.Dispatch(shaderKernel, uvMapSize / 8, 1, 1);
+            computeShader.Dispatch(shaderKernel, width / 8, height / 8, 1);
 
-            Texture2D outputZenithTexture = new Texture2D(zenithRenderTexture.width, zenithRenderTexture.height, TextureFormat.RGBA32, false)
-            {
-                filterMode = FilterMode.Point
-            };
+            Texture2D outputAzimuthTexture = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGBA32, false);
 
-            RenderTexture.active = zenithRenderTexture;
-            outputZenithTexture.ReadPixels(new Rect(0, 0, zenithRenderTexture.width, zenithRenderTexture.height), 0, 0);
+            RenderTexture.active = renderTexture;
+            outputAzimuthTexture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
             RenderTexture.active = null;
 
             byte[] bytes;
-            bytes = outputZenithTexture.EncodeToPNG();
-
-            string zenithMapPath = outputPath + "_zenith.png";
-
-            System.IO.File.WriteAllBytes(zenithMapPath, bytes);
-            zenithMapPath = GetAssetPath(zenithMapPath);
-            AssetDatabase.ImportAsset(zenithMapPath);
-            outputZenithTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(zenithMapPath);
-            outputZenithTexture.filterMode = FilterMode.Point;
-            var zenithMapSettings = AssetImporter.GetAtPath(zenithMapPath) as TextureImporter;
-            zenithMapSettings.filterMode = FilterMode.Point;
-            zenithMapSettings.SetPlatformTextureSettings(platformSetting);
-
-            var azimuthRenderTexture = new RenderTexture(uvMapSize, uvMapSize, 0, RenderTextureFormat.BGRA32, RenderTextureReadWrite.sRGB)
-            {
-                enableRandomWrite = true,
-                name = "SloaneShotAzimuthMap",
-                hideFlags = HideFlags.HideAndDontSave
-            };
-
-            computeShaderPath = SloaneShotConst.PackagePath + "\\Shaders\\UVmapGenerationAzimuth.compute";
-            computeShader = Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>(computeShaderPath));
-            shaderKernel = computeShader.FindKernel("CSMain");
-
-            computeShader.SetTexture(shaderKernel, "outputRT", azimuthRenderTexture);
-            computeShader.SetInt("width", uvMapSize);
-            computeShader.SetInt("height", uvMapSize);
-            computeShader.SetInt("azimuthCount", azimuthCount);
-
-            computeShader.Dispatch(shaderKernel, uvMapSize, uvMapSize / 8, 1);
-
-            Texture2D outputAzimuthTexture = new Texture2D(azimuthRenderTexture.width, azimuthRenderTexture.height, TextureFormat.RGBA32, false);
-
-            RenderTexture.active = azimuthRenderTexture;
-            outputAzimuthTexture.ReadPixels(new Rect(0, 0, azimuthRenderTexture.width, azimuthRenderTexture.height), 0, 0);
-            RenderTexture.active = null;
-
             bytes = outputAzimuthTexture.EncodeToPNG();
 
-            string azimuthMapPath = outputPath + "_azimuth.png";
+            System.IO.File.WriteAllBytes(outputPath, bytes);
+            outputPath = GetAssetPath(outputPath);
+            AssetDatabase.ImportAsset(outputPath);
+            var mapSettings = AssetImporter.GetAtPath(outputPath) as TextureImporter;
+            mapSettings.filterMode = FilterMode.Point;
+            mapSettings.sRGBTexture = false;
+            mapSettings.mipmapEnabled = false;
+            mapSettings.SetPlatformTextureSettings(platformSetting);
 
-            System.IO.File.WriteAllBytes(azimuthMapPath, bytes);
-            azimuthMapPath = GetAssetPath(azimuthMapPath);
-            AssetDatabase.ImportAsset(azimuthMapPath);
-            var azimuthMapSettings = AssetImporter.GetAtPath(azimuthMapPath) as TextureImporter;
-            azimuthMapSettings.filterMode = FilterMode.Point;
-            azimuthMapSettings.SetPlatformTextureSettings(platformSetting);
+            DestroyImmediate(computeShader);
         }
 
         public static void ExecuteCast(GameObject targetObject, Bounds targetBounds, string outputPath, int zenithCount, int azimuthCount, int singleSegmentSize, CastChannelSettings settings)
@@ -265,6 +235,7 @@ namespace Sloane
             cmd.Release();
             DestroyImmediate(camera.gameObject);
             DestroyImmediate(targetObject);
+            DestroyImmediate(computeShader);
             QualitySettings.renderPipeline = pipelineCache;
         }
 

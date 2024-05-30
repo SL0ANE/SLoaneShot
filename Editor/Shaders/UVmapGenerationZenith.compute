@@ -6,8 +6,6 @@ int width;
 int height;
 int zenithCount;
 
-#define PI 3.1415926535897932384626433832795
-
 [numthreads(8,8,1)]
 void CSMain (uint3 id : SV_DispatchThreadID)
 {
@@ -17,7 +15,7 @@ void CSMain (uint3 id : SV_DispatchThreadID)
     float upDotView = 1.0 - float(id.x) / float(width) * 2.0;
     float angle = acos(upDotView);
     
-    float index = round(angle * zenithCount / PI) / zenithCount;
+    float index = angle / PI;
 
     outputRT[id.xy] = float4(index, index, index, 1.0);
 }
