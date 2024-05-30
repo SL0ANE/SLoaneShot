@@ -318,6 +318,11 @@ namespace Sloane
                     };
 
                     materials[i].CopyPropertiesFromMaterial(materialCache);
+
+                    if(materialCache.HasProperty("_MainTex"))
+                    {
+                        materials[i].SetTexture("_BaseMap", materials[i].GetTexture("_MainTex"));
+                    }
                 }
 
                 renderer.sharedMaterials = materials;
