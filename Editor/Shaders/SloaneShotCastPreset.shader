@@ -1,18 +1,15 @@
-Shader "Sloane/Shot/Unlit"
+Shader "Sloane/Shot/CastPreset"
 {
     Properties
     {
         _BaseMap("Main Texture", 2D) = "white" {}
-        _AlphaClip("Alpha Clip", Range(0.0, 1.0)) = 0.5
-        _ZenithCount("Zenith Count", Int) = 8
-        _AzimuthCount("Azimuth Count", Int) = 16
-        _GridCount("Grid Count", Int) = 16
-
-        [HideinInspector] _UseLut("Use Lut", Range(0.0, 1.0)) = 1.0
-
-        _ZenithMap("Zenith Map", 2D) = "white" {}
-        _AzimuthMap("Azimuth Map", 2D) = "white" {}
-        _SinLut("Sin LUT", 2D) = "white" {}
+        _MaskMap("Mask Texture", 2D) = "white" {}
+        _MaskColor("Mask Color ", Color) = (1.0, 1.0, 1.0, 1.0)
+        _MetallicGlossMap("Metallic Map", 2D) = "white" {}
+        _BumpMap("Normal Map", 2D) = "bump" {}
+        _BumpScale("Normal Strength", Range(0.0, 1.0)) = 1.0
+        _OcclusionMap("Occlusion Map", 2D) = "white" {}
+        _EmissionMap("Emission Map", 2D) = "white" {}
     }
 
     SubShader
@@ -25,19 +22,13 @@ Shader "Sloane/Shot/Unlit"
         
         #pragma enable_d3d11_debug_symbols
         #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
-        #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/UnityInstancing.hlsl"
         #include "Packages/com.unity.render-pipelines.core/ShaderLibrary/Packing.hlsl"
-
-        #pragma multi_compile_instancing
-        #pragma shader_feature_local _SLOANESHOT_WITHLUT
 
         struct Attributes {
             float3 positionOS : POSITION;
             float3 normal : NORMAL;
             float4 tangent : TANGENT;
             float4 texcoord : TEXCOORD0;
-
-            UNITY_VERTEX_INPUT_INSTANCE_ID
         };
 
         struct Varyings {
@@ -46,29 +37,46 @@ Shader "Sloane/Shot/Unlit"
             float3 normal : TEXCOORD1;
             float4 tangent : TEXCOORD2;
             float3 positionWS : TEXCOORD5;
-
-            UNITY_VERTEX_INPUT_INSTANCE_ID
-	        UNITY_VERTEX_OUTPUT_STEREO
         };
 
         CBUFFER_START(UnityPerMaterial)
 
         sampler2D _BaseMap;
         float4 _BaseMap_ST;
-        float _AlphaClip;
 
-        int _ZenithCount;
-        int _AzimuthCount;
-        int _GridCount;
+        float4 _MaskColor;
 
-        sampler2D _ZenithMap;
-        sampler2D _AzimuthMap;
-        sampler2D _SinLut;
+        sampler2D _MaskMap;
+        float4 _MaskMap_ST;
+
+        sampler2D _MetallicGlossMap;
+        float4 _MetallicGlossMap_ST;
+
+        sampler2D _BumpMap;
+        float4 _BumpMap_ST;
+        float _BumpScale;
+
+        sampler2D _OcclusionMap;
+        float4 _OcclusionMap_ST;
 
         CBUFFER_END
 
-        // #define SLOANESHOT_WITHLUT
-        #include "SloaneShotUtility.hlsl"
+
+        Varyings BaseVert(Attributes input)
+        {
+            Varyings output = (Varyings)0;
+            output.positionWS = TransformObjectToWorld(input.positionOS);
+            output.positionCS = TransformWorldToHClip(output.positionWS);
+
+            output.normal = TransformObjectToWorldNormal(input.normal);
+            output.tangent.xyz = TransformObjectToWorldDir(input.tangent);
+            output.tangent.w = input.tangent.w;
+
+            output.uv = input.texcoord.xy;
+
+            return output;
+        }
+
         ENDHLSL
 
         Pass
@@ -80,6 +88,7 @@ Shader "Sloane/Shot/Unlit"
 			ZWrite On
 			ZTest Less
 			ColorMask RGBA
+            Cull Off
             
             HLSLPROGRAM
 
@@ -87,12 +96,12 @@ Shader "Sloane/Shot/Unlit"
             {
                 float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 float4 albedo = tex2D(_BaseMap, albedoUV);
-                clip(albedo.a - _AlphaClip);
+                clip(albedo.a - 0.5);
 
                 return albedo;
             }
 
-            #pragma vertex SloaneShotBaseVert
+            #pragma vertex BaseVert
             #pragma fragment frag
 
             ENDHLSL
@@ -100,13 +109,14 @@ Shader "Sloane/Shot/Unlit"
 
         Pass
         {
-            Name "DepthOnly"
-            Tags{"LightMode" = "DepthOnly"}
+            Name "Forward"
+			Tags { "LightMode" = "DepthOnly" }
 
             Blend One Zero
 			ZWrite On
 			ZTest Less
 			ColorMask 0
+            Cull Off
             
             HLSLPROGRAM
 
@@ -114,17 +124,15 @@ Shader "Sloane/Shot/Unlit"
             {
                 float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 float4 albedo = tex2D(_BaseMap, albedoUV);
-                clip(albedo.a - _AlphaClip);
+                clip(albedo.a - 0.5);
 
                 return albedo;
             }
 
-            #pragma vertex SloaneShotBaseVert
+            #pragma vertex BaseVert
             #pragma fragment frag
 
             ENDHLSL
         }
     }
-
-    CustomEditor "Sloane.SloaneShotShaderGUI"
 }

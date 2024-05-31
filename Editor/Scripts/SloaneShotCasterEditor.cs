@@ -10,20 +10,20 @@ namespace Sloane
     {
         public struct CastChannelSettings
         {
-            public bool castAbeldo;
+            public bool castAlbedo;
             public bool castNormal;
             public bool castMask;
         }
         private static GameObject target;
         private static string targetPath;
         private static int segmentSize = 64;
-        private static int segmentCountScale = 2;
+        private static int segmentCountScale = 4;
         private static int mapSize = 16;
         private static Bounds bounds;
 
         private static CastChannelSettings castChannelSettings = new CastChannelSettings()
         {
-            castAbeldo = true,
+            castAlbedo = true,
             castNormal = true,
             castMask = false
         };
@@ -76,7 +76,7 @@ namespace Sloane
 
             bounds = EditorGUILayout.BoundsField("Bounds", bounds);
 
-            castChannelSettings.castAbeldo = EditorGUILayout.Toggle("Cast Abeldo", castChannelSettings.castAbeldo);
+            castChannelSettings.castAlbedo = EditorGUILayout.Toggle("Cast Albedo", castChannelSettings.castAlbedo);
             castChannelSettings.castNormal = EditorGUILayout.Toggle("Cast Normal", castChannelSettings.castNormal);
             castChannelSettings.castMask = EditorGUILayout.Toggle("Cast Mask", castChannelSettings.castMask);
 
@@ -126,7 +126,7 @@ namespace Sloane
                 hideFlags = HideFlags.HideAndDontSave
             };
 
-            string computeShaderPath = SloaneShotConst.PackagePath + "\\Shaders\\" + csName + ".compute";
+            string computeShaderPath = SloaneShotConst.PackagePath + "\\Editor\\Shaders\\" + csName + ".compute";
             var computeShader = Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>(computeShaderPath));
             int shaderKernel = computeShader.FindKernel("CSMain");
 
@@ -168,7 +168,7 @@ namespace Sloane
 
             targetObject = InitializeTargetGameObject(targetObject);
 
-            string cameraPath = SloaneShotConst.PackagePath + "\\Assets\\Prefabs\\SloaneShotCamera.prefab";
+            string cameraPath = SloaneShotConst.PackagePath + "\\Editor\\Assets\\Prefabs\\SloaneShotCamera.prefab";
             Camera camera = AssetDatabase.LoadAssetAtPath<GameObject>(cameraPath).GetComponent<Camera>();
             camera = GameObject.Instantiate(camera, Vector3.zero, Quaternion.identity, targetObject.transform);
             camera.hideFlags = HideFlags.HideAndDontSave;
@@ -195,7 +195,7 @@ namespace Sloane
             // 初始化compute shader
             CommandBuffer cmd = new CommandBuffer();
 
-            string computeShaderPath = SloaneShotConst.PackagePath + "\\Shaders\\PasteSegementToSet.compute";
+            string computeShaderPath = SloaneShotConst.PackagePath + "\\Editor\\Shaders\\PasteSegementToSet.compute";
             var computeShader = Instantiate(AssetDatabase.LoadAssetAtPath<ComputeShader>(computeShaderPath));
             int shaderKernel = computeShader.FindKernel("CSMain");
 
@@ -207,17 +207,17 @@ namespace Sloane
             UniversalRenderPipelineAsset pipelineAsset;
             string outPath;
 
-            if (settings.castAbeldo)
+            if (settings.castAlbedo)
             {
-                pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotAbeldoPipeline.asset";
+                pipelinePath = SloaneShotConst.PackagePath + "\\Editor\\Assets\\Rendering\\SloaneShotAlbedoPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
-                outPath = outputPath + "_abeldo.png";
+                outPath = outputPath + "_albedo.png";
                 TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, targetBounds.center, outPath);
             }
 
             if (settings.castNormal)
             {
-                pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotNormalPipeline.asset";
+                pipelinePath = SloaneShotConst.PackagePath + "\\Editor\\Assets\\Rendering\\SloaneShotNormalPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
                 outPath = outputPath + "_normal.png";
                 TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, targetBounds.center, outPath);
@@ -225,7 +225,7 @@ namespace Sloane
 
             if (settings.castMask)
             {
-                pipelinePath = SloaneShotConst.PackagePath + "\\Assets\\Rendering\\SloaneShotMaskPipeline.asset";
+                pipelinePath = SloaneShotConst.PackagePath + "\\Editor\\Assets\\Rendering\\SloaneShotMaskPipeline.asset";
                 pipelineAsset = AssetDatabase.LoadAssetAtPath<UniversalRenderPipelineAsset>(pipelinePath);
                 outPath = outputPath + "_mask.png";
                 TakeShot(cmd, pipelineAsset, castRenderTexture, outputSetRenderTexture, computeShader, shaderKernel, zenithCount, azimuthCount, singleSegmentSize, gridWidth, camera, boundsDistance, targetBounds.center, outPath);
@@ -276,14 +276,14 @@ namespace Sloane
                 }
             }
 
-            Texture2D outputAbeldoTexture = new Texture2D(outputSetRenderTexture.width, outputSetRenderTexture.height, TextureFormat.RGBA32, false);
+            Texture2D outputAlbedoTexture = new Texture2D(outputSetRenderTexture.width, outputSetRenderTexture.height, TextureFormat.RGBA32, false);
 
             RenderTexture.active = outputSetRenderTexture;
-            outputAbeldoTexture.ReadPixels(new Rect(0, 0, outputSetRenderTexture.width, outputSetRenderTexture.height), 0, 0);
+            outputAlbedoTexture.ReadPixels(new Rect(0, 0, outputSetRenderTexture.width, outputSetRenderTexture.height), 0, 0);
             RenderTexture.active = null;
 
             byte[] bytes;
-            bytes = outputAbeldoTexture.EncodeToPNG();
+            bytes = outputAlbedoTexture.EncodeToPNG();
 
             System.IO.File.WriteAllBytes(outputPath, bytes);
             AssetDatabase.ImportAsset(GetAssetPath(outputPath));
@@ -299,7 +299,7 @@ namespace Sloane
 
         public static Bounds InitializeTargetRenderers(GameObject targetObject)
         {
-            string shaderPath = SloaneShotConst.PackagePath + "\\Shaders\\SloaneShotCast.shader";
+            string shaderPath = SloaneShotConst.PackagePath + "\\Editor\\Shaders\\SloaneShotCast.shader";
             var shader = AssetDatabase.LoadAssetAtPath<Shader>(shaderPath);
 
             var targetRenderers = targetObject.GetComponentsInChildren<Renderer>();

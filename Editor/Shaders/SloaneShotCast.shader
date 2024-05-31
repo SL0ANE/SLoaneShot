@@ -1,10 +1,10 @@
-Shader "Sloane/Shot/Cast"
+Shader "Hidden/Sloane/Shot/Cast"
 {
     Properties
     {
         _BaseMap("Main Texture", 2D) = "white" {}
         _MaskMap("Mask Texture", 2D) = "white" {}
-        _AlphaClip("Alpha Clip", Range(0.0, 1.0)) = 0.5
+        _MaskColor("Mask Color ", Color) = (1.0, 1.0, 1.0, 1.0)
         _MetallicGlossMap("Metallic Map", 2D) = "white" {}
         _BumpMap("Normal Map", 2D) = "bump" {}
         _BumpScale("Normal Strength", Range(0.0, 1.0)) = 1.0
@@ -43,7 +43,8 @@ Shader "Sloane/Shot/Cast"
 
         sampler2D _BaseMap;
         float4 _BaseMap_ST;
-        float _AlphaClip;
+
+        float4 _MaskColor;
 
         sampler2D _MaskMap;
         float4 _MaskMap_ST;
@@ -87,6 +88,7 @@ Shader "Sloane/Shot/Cast"
 			ZWrite On
 			ZTest Less
 			ColorMask RGBA
+            Cull Off
             
             HLSLPROGRAM
 
@@ -94,7 +96,7 @@ Shader "Sloane/Shot/Cast"
             {
                 float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 float4 albedo = tex2D(_BaseMap, albedoUV);
-                clip(albedo.a - _AlphaClip);
+                clip(albedo.a - 0.5);
 
                 return albedo;
             }
@@ -114,6 +116,7 @@ Shader "Sloane/Shot/Cast"
 			ZWrite On
 			ZTest Less
 			ColorMask 0
+            Cull Off
             
             HLSLPROGRAM
 
@@ -121,7 +124,7 @@ Shader "Sloane/Shot/Cast"
             {
                 float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 float4 albedo = tex2D(_BaseMap, albedoUV);
-                clip(albedo.a - _AlphaClip);
+                clip(albedo.a - 0.5);
 
                 return albedo;
             }
@@ -135,12 +138,13 @@ Shader "Sloane/Shot/Cast"
         Pass
         {
             Name "Forward"
-			Tags { "LightMode" = "SloaneCastAbeldo" }
+			Tags { "LightMode" = "SloaneCastAlbedo" }
 
             Blend One Zero
 			ZWrite On
 			ZTest Less
 			ColorMask RGBA
+            Cull Off
             
             HLSLPROGRAM
 
@@ -148,7 +152,7 @@ Shader "Sloane/Shot/Cast"
             {
                 float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 float4 albedo = tex2D(_BaseMap, albedoUV);
-                clip(albedo.a - _AlphaClip);
+                clip(albedo.a - 0.5);
 
                 return albedo;
             }
@@ -168,6 +172,7 @@ Shader "Sloane/Shot/Cast"
 			ZWrite On
 			ZTest Less
 			ColorMask RGBA
+            Cull Off
             
             HLSLPROGRAM
             float3 PackNormal(real3 unpackedNormal)
@@ -179,7 +184,7 @@ Shader "Sloane/Shot/Cast"
             {
                 float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 float4 albedo = tex2D(_BaseMap, albedoUV);
-                clip(albedo.a - _AlphaClip);
+                clip(albedo.a - 0.5);
 
                 float2 normalUV = input.uv * _BumpMap_ST.xy + _BumpMap_ST.zw;
                 float3 normalTS = UnpackNormalScale(tex2D(_BumpMap, normalUV), _BumpScale);
@@ -209,6 +214,7 @@ Shader "Sloane/Shot/Cast"
 			ZWrite On
 			ZTest Less
 			ColorMask RGBA
+            Cull Off
             
             HLSLPROGRAM
 
@@ -216,10 +222,10 @@ Shader "Sloane/Shot/Cast"
             {
                 float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
                 float4 albedo = tex2D(_BaseMap, albedoUV);
-                clip(albedo.a - _AlphaClip);
+                clip(albedo.a - 0.01);
 
                 float2 maskUV = input.uv * _MaskMap_ST.xy + _MaskMap_ST.zw;
-                float4 mask = tex2D(_MaskMap, maskUV);
+                float4 mask = tex2D(_MaskMap, maskUV) * _MaskColor;
 
                 return mask;
             }

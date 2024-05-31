@@ -23,7 +23,7 @@ float LutCos(float angle)
 // 广告牌在模型空间下操作
 void GetCorrectedCameraVector(out float3 camRightDir, out float3 camUpDir, out float3 camFrontDir, out int zenithIndex, out int azimuthIndex)
 {
-    camFrontDir = mul(UNITY_MATRIX_I_M, float3(unity_CameraToWorld[0][2], unity_CameraToWorld[1][2], unity_CameraToWorld[2][2]));
+    camFrontDir = mul(UNITY_MATRIX_I_M, mul(UNITY_MATRIX_M, float4(0.0, 0.0, 0.0, 1.0)).xyz - _WorldSpaceCameraPos);
     camFrontDir = normalize(camFrontDir);
     camUpDir = mul(UNITY_MATRIX_I_M, float3(unity_CameraToWorld[0][1], unity_CameraToWorld[1][1], unity_CameraToWorld[2][1]));
     camUpDir = normalize(camUpDir);
@@ -73,7 +73,7 @@ void GetCorrectedCameraVector(out float3 camRightDir, out float3 camUpDir, out f
 }
 
 
-Varyings BaseVert(Attributes input)
+Varyings SloaneShotBaseVert(Attributes input)
 {
     Varyings output = (Varyings)0;
     
@@ -94,6 +94,10 @@ Varyings BaseVert(Attributes input)
     positionOS += input.positionOS.y * camUpDir;
     int currentIndex = zenithIndex * _AzimuthCount + azimuthIndex;
 
+#ifdef _OBJECT_COORD
+    output.positionOS = positionOS;
+#endif
+
     float girdSize = 1.0 / _GridCount;
     output.uv.x = input.texcoord.x * girdSize + float(currentIndex % _GridCount) * girdSize;
     output.uv.y = input.texcoord.y * girdSize + float(currentIndex / _GridCount) * girdSize;
@@ -111,4 +115,31 @@ Varyings BaseVert(Attributes input)
 	OUTPUT_SH(output.normal.xyz, output.lightmapUV.xyz); */
 
     return output;
+}
+
+half4 SloaneShotDepthOnlyFrag(Varyings input) : SV_Target
+{
+    float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
+    float4 albedo = tex2D(_BaseMap, albedoUV);
+    clip(albedo.a - _AlphaClip);
+
+    return albedo;
+}
+
+half4 SloaneShotDepthNormalFrag(Varyings input) : SV_Target
+{
+    float2 albedoUV = input.uv * _BaseMap_ST.xy + _BaseMap_ST.zw;
+    float4 albedo = tex2D(_BaseMap, albedoUV);
+    clip(albedo.a - _AlphaClip);
+
+    float2 normalUV = input.uv * _BumpMap_ST.xy + _BumpMap_ST.zw;
+    float3 normalTS = UnpackNormalScale(tex2D(_BumpMap, normalUV), _BumpScale);
+    
+    float sgn = input.tangent.w;
+    float3 bitangent = sgn * cross(input.normal.xyz, input.tangent.xyz);
+    half3x3 tangentToWorld = half3x3(input.tangent.xyz, bitangent.xyz, input.normal.xyz);
+
+    float3 normalWS = TransformTangentToWorld(normalTS, tangentToWorld);
+
+    return albedo;
 }
